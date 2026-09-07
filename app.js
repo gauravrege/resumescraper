@@ -94,6 +94,21 @@ async function processFiles(files) {
 
             const parsedData = parseResumeText(fullText, file.name);
             allExtractedData.push(parsedData);
+            
+            // Inject row into preview table
+            const tr = document.createElement('tr');
+            tr.className = "hover:bg-gray-50 transition-colors";
+            tr.innerHTML = `
+                <td class="px-4 py-3 font-medium text-gray-900 border-b">${parsedData["Candidate Name"]}</td>
+                <td class="px-4 py-3 border-b">${parsedData["Email"]}</td>
+                <td class="px-4 py-3 border-b">${parsedData["Phone"]}</td>
+                <td class="px-4 py-3 border-b">
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-800">
+                        ${parsedData["Top Skills"].split(', ').slice(0,3).join('</span> <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-800 ml-1">')}
+                    </span>
+                </td>
+            `;
+            document.getElementById('previewTableBody').appendChild(tr);
 
         } catch (error) {
             console.error(`Error processing ${file.name}:`, error);
@@ -101,13 +116,13 @@ async function processFiles(files) {
     }
 
     // Finished
-    progressBar.style.width = `100%`;
-    progressText.textContent = `${files.length} of ${files.length} completed`;
+    progressBar.style.width = \`100%\`;
+    progressText.textContent = \`\${files.length} of \${files.length} completed\`;
     
     setTimeout(() => {
         statusDiv.classList.add('hidden');
         resultDiv.classList.remove('hidden');
-        successText.textContent = `Successfully extracted ${files.length} resume(s)!`;
+        successText.textContent = \`Successfully extracted \${files.length} resume(s)!\`;
     }, 500);
 }
 
@@ -241,5 +256,6 @@ resetBtn.addEventListener('click', () => {
     dropzone.classList.remove('hidden');
     fileInput.value = '';
     allExtractedData = [];
+    document.getElementById('previewTableBody').innerHTML = '';
     progressBar.style.width = '0%';
 });
