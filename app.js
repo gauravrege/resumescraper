@@ -1,35 +1,46 @@
-const dropzone = document.getElementById('dropzone');
 const fileInput = document.getElementById('fileInput');
-const statusDiv = document.getElementById('status');
+const dropzone = document.getElementById('dropzone');
+
+const viewUpload = document.getElementById('view-upload');
+const viewProcessing = document.getElementById('view-processing');
+const viewResults = document.getElementById('view-results');
+
 const progressBar = document.getElementById('progressBar');
 const progressText = document.getElementById('progressText');
-const resultDiv = document.getElementById('result');
 const successText = document.getElementById('successText');
-const btnDownloadCombined = document.getElementById('btnDownloadCombined');
-const resetBtn = document.getElementById('resetBtn');
+const previewTableBody = document.getElementById('previewTableBody');
+
+const btnDownload = document.getElementById('btnDownload');
+const btnReset = document.getElementById('btnReset');
 
 let allExtractedData = [];
 
+// Comprehensive tech skills list
 const TECH_SKILLS = [
     "JavaScript", "Python", "Java", "C++", "C#", "React", "Node.js", "Angular", "Vue",
     "SQL", "NoSQL", "MongoDB", "PostgreSQL", "MySQL", "AWS", "Azure", "GCP", "Docker",
     "Kubernetes", "Git", "CI/CD", "Machine Learning", "Data Science", "HTML", "CSS", "Tailwind",
     "TypeScript", "Go", "Rust", "Ruby", "PHP", "Laravel", "Django", "Flask", "Spring Boot",
-    "Next.js", "GraphQL", "REST API", "Salesforce", "Excel", "Data Analysis", "Project Management"
+    "Next.js", "GraphQL", "REST API", "Salesforce", "Excel", "Data Analysis", "Project Management",
+    "Figma", "UI/UX", "Product Management", "Agile", "Scrum"
 ];
+
+// --- File Selection Handlers ---
 
 dropzone.addEventListener('dragover', (e) => {
     e.preventDefault();
-    dropzone.classList.add('border-indigo-500', 'bg-indigo-50');
+    dropzone.classList.add('border-black', 'bg-white/80');
 });
 
 dropzone.addEventListener('dragleave', () => {
-    dropzone.classList.remove('border-indigo-500', 'bg-indigo-50');
+    dropzone.classList.remove('border-black', 'bg-white/80');
 });
 
 dropzone.addEventListener('drop', (e) => {
     e.preventDefault();
-    dropzone.classList.remove('border-indigo-500', 'bg-indigo-50');
+    dropzone.classList.remove('border-black', 'bg-white/80');
+    
+    // File input is handled via change event if we assign files, but let's just trigger process directly
     const files = Array.from(e.dataTransfer.files).filter(f => f.name.toLowerCase().endsWith('.pdf') || f.name.toLowerCase().endsWith('.docx'));
     if (files.length > 0) {
         processFiles(files);
@@ -38,20 +49,22 @@ dropzone.addEventListener('drop', (e) => {
     }
 });
 
-dropzone.addEventListener('click', () => {
-    fileInput.click();
-});
-
 fileInput.addEventListener('change', (e) => {
     const files = Array.from(e.target.files);
     if (files.length > 0) {
         processFiles(files);
     }
+    // Reset input so the same files can be selected again if needed
+    fileInput.value = '';
 });
+
+// --- Extraction Logic ---
 
 async function extractTextFromPDF(file) {
     const arrayBuffer = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    // Use Uint8Array for maximum compatibility with pdf.js
+    const uint8Array = new Uint8Array(arrayBuffer);
+    const pdf = await pdfjsLib.getDocument({ data: uint8Array }).promise;
     let fullText = "";
 
     for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
@@ -69,18 +82,24 @@ async function extractTextFromDOCX(file) {
     return result.value;
 }
 
+// --- Main Processing Flow ---
+
 async function processFiles(files) {
-    dropzone.classList.add('hidden');
-    statusDiv.classList.remove('hidden');
+    // Switch to Processing View
+    viewUpload.classList.add('hidden');
+    viewProcessing.classList.remove('hidden');
+    viewProcessing.classList.add('flex');
+    
     allExtractedData = [];
+    previewTableBody.innerHTML = '';
     
     for (let i = 0; i < files.length; i++) {
         const file = files[i];
         
         // Update Progress UI
-        const percent = Math.round(((i) / files.length) * 100);
+        const percent = Math.round((i / files.length) * 100);
         progressBar.style.width = `${percent}%`;
-        progressText.textContent = `Extracting ${file.name} (${i + 1} of ${files.length})...`;
+        progressText.textContent = `Analyzing ${file.name} (${i + 1}/${files.length})`;
 
         try {
             let fullText = "";
@@ -96,40 +115,89 @@ async function processFiles(files) {
             allExtractedData.push(parsedData);
             
             // Inject row into preview table
-            const tr = document.createElement('tr');
-            tr.className = "hover:bg-gray-50 transition-colors";
-            tr.innerHTML = `
-                <td class="px-4 py-3 font-medium text-gray-900 border-b">${parsedData["Candidate Name"]}</td>
-                <td class="px-4 py-3 border-b">${parsedData["Email"]}</td>
-                <td class="px-4 py-3 border-b">${parsedData["Phone"]}</td>
-                <td class="px-4 py-3 border-b">
-                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-800">
-                        ${parsedData["Top Skills"].split(', ').slice(0,3).join('</span> <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-800 ml-1">')}
-                    </span>
-                </td>
-            `;
-            document.getElementById('previewTableBody').appendChild(tr);
+            renderTableRow(parsedData);
 
         } catch (error) {
             console.error(`Error processing ${file.name}:`, error);
+            // Push failed row
+            const failedData = {
+                "File Name": file.name,
+                "Candidate Name": "Extraction Failed",
+                "Email": "N/A",
+                "Phone": "N/A",
+                "Top Skills": "N/A",
+                "All Skills": "N/A",
+                "Status": "Error"
+            };
+            allExtractedData.push(failedData);
+            renderTableRow(failedData);
         }
     }
 
-    // Finished
-    progressBar.style.width = \`100%\`;
-    progressText.textContent = \`\${files.length} of \${files.length} completed\`;
+    // Processing Complete
+    progressBar.style.width = `100%`;
+    progressText.textContent = `Finalizing database...`;
     
+    // Add artificial tiny delay for smooth UX transition
     setTimeout(() => {
-        statusDiv.classList.add('hidden');
-        resultDiv.classList.remove('hidden');
-        successText.textContent = \`Successfully extracted \${files.length} resume(s)!\`;
-    }, 500);
+        viewProcessing.classList.remove('flex');
+        viewProcessing.classList.add('hidden');
+        
+        viewResults.classList.remove('hidden');
+        viewResults.classList.add('flex');
+        
+        successText.textContent = `Successfully processed ${files.length} document${files.length > 1 ? 's' : ''}.`;
+    }, 800);
 }
 
-// Highly targeted regex parser for resumes
+function renderTableRow(data) {
+    const tr = document.createElement('tr');
+    tr.className = "hover:bg-gray-50/50 transition-colors";
+    
+    // Format skills cleanly
+    let skillsHtml = '<span class="text-gray-400 italic">None</span>';
+    if (data["Top Skills"] && data["Top Skills"] !== "None Detected" && data["Top Skills"] !== "N/A") {
+        const skillsArray = data["Top Skills"].split(', ');
+        skillsHtml = skillsArray.map(s => `<span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-gray-100 text-gray-800 border border-gray-200 mr-1.5 mb-1 shadow-sm">${s}</span>`).join('');
+    }
+
+    // Format status
+    const isError = data["Status"] === "Error";
+    const statusHtml = isError 
+        ? `<span class="inline-flex items-center gap-1 text-xs font-medium text-red-600"><i class="ph-fill ph-warning-circle"></i> Error</span>`
+        : `<span class="inline-flex items-center gap-1 text-xs font-medium text-green-600"><i class="ph-bold ph-check"></i> OK</span>`;
+
+    tr.innerHTML = `
+        <td class="px-6 py-4 font-medium text-gray-900">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 shrink-0">
+                    <i class="ph-fill ph-user"></i>
+                </div>
+                <div>
+                    <p class="truncate max-w-[150px]" title="${data["Candidate Name"]}">${data["Candidate Name"]}</p>
+                    <p class="text-[10px] text-gray-400 truncate max-w-[150px]" title="${data["File Name"]}">${data["File Name"]}</p>
+                </div>
+            </div>
+        </td>
+        <td class="px-6 py-4">
+            <p class="text-sm truncate max-w-[180px] text-gray-600" title="${data["Email"]}"><i class="ph ph-envelope-simple mr-1 text-gray-400"></i>${data["Email"]}</p>
+            <p class="text-xs text-gray-500 mt-0.5"><i class="ph ph-phone mr-1 text-gray-400"></i>${data["Phone"]}</p>
+        </td>
+        <td class="px-6 py-4 max-w-[200px] flex-wrap items-center pt-5 border-none">
+            ${skillsHtml}
+        </td>
+        <td class="px-6 py-4">
+            ${statusHtml}
+        </td>
+    `;
+    previewTableBody.appendChild(tr);
+}
+
+// --- Regex Parser ---
+
 function parseResumeText(text, filename) {
-    // 1. Email
-    const emailRegex = /([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9_-]+)/i;
+    // 1. Email (Stricter regex to avoid false positives)
+    const emailRegex = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i;
     const emailMatch = text.match(emailRegex);
     const email = emailMatch ? emailMatch[1].trim() : "Not Found";
 
@@ -138,24 +206,25 @@ function parseResumeText(text, filename) {
     const phoneMatch = text.match(phoneRegex);
     const phone = phoneMatch ? phoneMatch[0].trim() : "Not Found";
 
-    // 3. Extract Name (Heuristic: usually at the very top, before long texts)
-    // Grab the first non-empty line that doesn't have an @ or numbers
+    // 3. Name Heuristic
     const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 2);
     let name = "Not Found";
-    for (let i = 0; i < Math.min(10, lines.length); i++) {
+    for (let i = 0; i < Math.min(15, lines.length); i++) {
         let line = lines[i];
-        if (!line.includes('@') && !/\d{5}/.test(line) && line.split(' ').length <= 4) {
-            // Remove common header fluff
-            line = line.replace(/resume|cv|curriculum vitae/ig, '').trim();
-            if (line.length > 2) {
-                name = line;
+        if (!line.includes('@') && !/\d{4}/.test(line) && line.split(' ').length <= 4) {
+            line = line.replace(/resume|cv|curriculum vitae|page/ig, '').trim();
+            if (line.length > 3) {
+                // Title case the name cleanly
+                name = line.replace(
+                    /\w\S*/g,
+                    (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase()
+                );
                 break;
             }
         }
     }
 
-    // If still not found, try to use filename without extension
-    if (name === "Not Found" || name.toLowerCase() === "not found") {
+    if (name === "Not Found") {
         name = filename.replace(/\.(pdf|docx)$/i, '').replace(/[-_]/g, ' ').trim();
     }
 
@@ -163,14 +232,13 @@ function parseResumeText(text, filename) {
     const foundSkills = [];
     const lowerText = text.toLowerCase();
     TECH_SKILLS.forEach(skill => {
-        // Use word boundary to avoid partial matches
         const skillRegex = new RegExp(`\\b${skill.toLowerCase().replace('+', '\\+')}\\b`, 'i');
         if (skillRegex.test(lowerText)) {
             foundSkills.push(skill);
         }
     });
 
-    const topSkills = foundSkills.length > 0 ? foundSkills.slice(0, 5).join(", ") : "None Detected";
+    const topSkills = foundSkills.length > 0 ? foundSkills.slice(0, 4).join(", ") : "None Detected";
     const allSkills = foundSkills.length > 0 ? foundSkills.join(", ") : "None Detected";
 
     return {
@@ -184,12 +252,12 @@ function parseResumeText(text, filename) {
     };
 }
 
-// --- Helper: Generate Beautiful Excel ---
+// --- Excel Export ---
+
 async function generateStyledExcel(dataArray, filename) {
     const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet("Resume Data");
+    const worksheet = workbook.addWorksheet("Resume Database");
 
-    // Define columns and optimal widths
     worksheet.columns = [
         { header: 'Candidate Name', key: 'Candidate Name', width: 25 },
         { header: 'Email', key: 'Email', width: 30 },
@@ -197,34 +265,23 @@ async function generateStyledExcel(dataArray, filename) {
         { header: 'Top Skills', key: 'Top Skills', width: 40 },
         { header: 'All Skills', key: 'All Skills', width: 60 },
         { header: 'File Name', key: 'File Name', width: 25 },
-        { header: 'Status', key: 'Status', width: 15 }
+        { header: 'Status', key: 'Status', width: 12 }
     ];
 
-    // Add data rows
     worksheet.addRows(dataArray);
 
-    // Style the Header Row
+    // Header Style
     worksheet.getRow(1).eachCell((cell) => {
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } }; // Indigo 600
-        cell.font = { color: { argb: 'FFFFFFFF' }, bold: true, size: 12 };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF000000' } }; // Black header
+        cell.font = { color: { argb: 'FFFFFFFF' }, bold: true, size: 11 };
         cell.alignment = { vertical: 'middle', horizontal: 'center' };
-        cell.border = {
-            top: {style:'thin', color: {argb:'FFD1D5DB'}}, left: {style:'thin', color: {argb:'FFD1D5DB'}},
-            bottom: {style:'thin', color: {argb:'FFD1D5DB'}}, right: {style:'thin', color: {argb:'FFD1D5DB'}}
-        };
     });
 
-    // Style Data Rows
+    // Row Styles
     worksheet.eachRow((row, rowNumber) => {
-        if (rowNumber === 1) return; // Skip header
-
+        if (rowNumber === 1) return;
         row.eachCell((cell, colNumber) => {
-            cell.border = {
-                top: {style:'thin', color: {argb:'FFD1D5DB'}}, left: {style:'thin', color: {argb:'FFD1D5DB'}},
-                bottom: {style:'thin', color: {argb:'FFD1D5DB'}}, right: {style:'thin', color: {argb:'FFD1D5DB'}}
-            };
-            
-            // Left-align text for better readability on long skills strings
+            cell.border = { bottom: {style:'thin', color: {argb:'FFE5E7EB'}} };
             if ([4, 5].includes(colNumber)) {
                 cell.alignment = { vertical: 'top', horizontal: 'left', wrapText: true };
             } else {
@@ -233,7 +290,6 @@ async function generateStyledExcel(dataArray, filename) {
         });
     });
 
-    // Create file buffer and trigger download in browser
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const url = window.URL.createObjectURL(blob);
@@ -244,18 +300,21 @@ async function generateStyledExcel(dataArray, filename) {
     window.URL.revokeObjectURL(url);
 }
 
-// --- Download Combined Excel ---
-btnDownloadCombined.addEventListener('click', async () => {
+// --- Buttons ---
+
+btnDownload.addEventListener('click', async () => {
     if (allExtractedData.length === 0) return;
-    await generateStyledExcel(allExtractedData, "parsed_resumes.xlsx");
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
+    await generateStyledExcel(allExtractedData, `resume_database_${timestamp}.xlsx`);
 });
 
-// Reset UI
-resetBtn.addEventListener('click', () => {
-    resultDiv.classList.add('hidden');
-    dropzone.classList.remove('hidden');
-    fileInput.value = '';
+btnReset.addEventListener('click', () => {
+    viewResults.classList.remove('flex');
+    viewResults.classList.add('hidden');
+    
+    viewUpload.classList.remove('hidden');
+    viewUpload.classList.add('flex');
+    
     allExtractedData = [];
-    document.getElementById('previewTableBody').innerHTML = '';
     progressBar.style.width = '0%';
 });
