@@ -192,6 +192,11 @@ function renderTableRow(data) {
             <p class="text-sm truncate max-w-[180px] text-gray-400" title="${data["Email"]}"><i class="ph ph-envelope-simple mr-1 text-gray-400"></i>${data["Email"]}</p>
             <p class="text-xs text-gray-400 mt-0.5"><i class="ph ph-phone mr-1 text-gray-400"></i>${data["Phone"]}</p>
         </td>
+        <td class="px-6 py-4">
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-[#58a6ff]/20 text-[#58a6ff] border border-[#58a6ff]/30 mb-1 shadow-sm">${data["Experience"] || "N/A"}</span>
+            <br>
+            <span class="text-xs text-gray-400 font-medium">${data["Domain"] || "Other"}</span>
+        </td>
         <td class="px-6 py-4 max-w-[200px] flex-wrap items-center pt-5 border-none">
             ${skillsHtml}
         </td>
@@ -250,11 +255,42 @@ function parseResumeText(text, filename) {
     const topSkills = foundSkills.length > 0 ? foundSkills.slice(0, 4).join(", ") : "None Detected";
     const allSkills = foundSkills.length > 0 ? foundSkills.join(", ") : "None Detected";
 
+    // 5. Experience Extraction
+    let experience = "Not Specified";
+    const expRegex = /(\d+)(?:\+| - \d+)?\s*(?:years?|yrs?)(?:\s+of)?\s+experience/i;
+    const expMatch = text.match(expRegex);
+    if (expMatch) {
+        experience = expMatch[1] + "+ Years";
+    }
+
+    // 6. Domain Classification
+    const domains = {
+        "Engineering & Tech": ["software", "developer", "engineer", "data", "it", "network", "cloud", "aws", "programmer"],
+        "Sales & Marketing": ["sales", "marketing", "seo", "account", "manager", "business", "b2b", "lead"],
+        "HR & Admin": ["hr", "human resources", "recruiter", "admin", "assistant", "talent"],
+        "Education & Teaching": ["teacher", "educator", "tutor", "professor", "school", "faculty"],
+        "Finance & Accounting": ["finance", "accounting", "tax", "audit", "cpa", "bank"]
+    };
+    let assignedDomain = "Other";
+    let maxDomainScore = 0;
+    for (const [domain, keywords] of Object.entries(domains)) {
+        let score = 0;
+        keywords.forEach(kw => {
+            if (new RegExp(`\\b${kw}\\b`, 'i').test(lowerText)) score++;
+        });
+        if (score > maxDomainScore && score > 0) {
+            maxDomainScore = score;
+            assignedDomain = domain;
+        }
+    }
+
     return {
         "File Name": filename,
         "Candidate Name": name,
         "Email": email,
         "Phone": phone,
+        "Experience": experience,
+        "Domain": assignedDomain,
         "Top Skills": topSkills,
         "All Skills": allSkills,
         "Status": "Processed"
@@ -265,37 +301,75 @@ function parseResumeText(text, filename) {
 
 async function generateStyledExcel(dataArray, filename) {
     const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet("Resume Database");
-
-    worksheet.columns = [
-        { header: 'Candidate Name', key: 'Candidate Name', width: 25 },
-        { header: 'Email', key: 'Email', width: 30 },
-        { header: 'Phone', key: 'Phone', width: 20 },
-        { header: 'Top Skills', key: 'Top Skills', width: 40 },
-        { header: 'All Skills', key: 'All Skills', width: 60 },
-        { header: 'File Name', key: 'File Name', width: 25 },
-        { header: 'Status', key: 'Status', width: 12 }
+    
+    // --- 1. Dashboard Sheet ---
+    const dashboard = workbook.addWorksheet("Dashboard");
+    dashboard.columns = [
+        { header: '', width: 30 },
+        { header: '', width: 20 }
     ];
-
-    worksheet.addRows(dataArray);
-
-    // Header Style
-    worksheet.getRow(1).eachCell((cell) => {
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0D1117' } }; // Black header
-        cell.font = { color: { argb: 'FFFFFFFF' }, bold: true, size: 11 };
-        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+    
+    // Dashboard Title
+    dashboard.addRow(["Resume Intelligence Dashboard", ""]);
+    dashboard.getRow(1).font = { size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
+    dashboard.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0D1117' } };
+    
+    dashboard.addRow(["", ""]);
+    dashboard.addRow(["Total Resumes Processed", dataArray.length]);
+    dashboard.getCell('A3').font = { bold: true };
+    
+    // Aggregate by Domain
+    const domainCounts = {};
+    dataArray.forEach(d => {
+        domainCounts[d.Domain] = (domainCounts[d.Domain] || 0) + 1;
     });
-
-    // Row Styles
-    worksheet.eachRow((row, rowNumber) => {
-        if (rowNumber === 1) return;
-        row.eachCell((cell, colNumber) => {
-            cell.border = { bottom: {style:'thin', color: {argb:'FF1F2937'}} };
-            if ([4, 5].includes(colNumber)) {
-                cell.alignment = { vertical: 'top', horizontal: 'left', wrapText: true };
-            } else {
-                cell.alignment = { vertical: 'middle', horizontal: 'left' };
-            }
+    
+    dashboard.addRow(["", ""]);
+    const headerRow = dashboard.addRow(["Domain Breakdown", "Candidate Count"]);
+    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
+    
+    for (const [dom, count] of Object.entries(domainCounts)) {
+        dashboard.addRow([dom, count]);
+    }
+    
+    // --- 2. Sheets per Domain ---
+    const uniqueDomains = [...new Set(dataArray.map(d => d.Domain))];
+    
+    uniqueDomains.forEach(domain => {
+        const safeName = (domain || "Other").replace(/[\\/?*[\]]/g, '').substring(0, 31);
+        const sheet = workbook.addWorksheet(safeName);
+        
+        const domainData = dataArray.filter(d => d.Domain === domain);
+        
+        sheet.columns = [
+            { header: 'Candidate Name', key: 'Candidate Name', width: 25 },
+            { header: 'Experience', key: 'Experience', width: 15 },
+            { header: 'Email', key: 'Email', width: 30 },
+            { header: 'Phone', key: 'Phone', width: 20 },
+            { header: 'Top Skills', key: 'Top Skills', width: 40 },
+            { header: 'File Name', key: 'File Name', width: 25 },
+            { header: 'Status', key: 'Status', width: 12 }
+        ];
+        
+        sheet.addRows(domainData);
+        
+        sheet.getRow(1).eachCell((cell) => {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0D1117' } };
+            cell.font = { color: { argb: 'FFFFFFFF' }, bold: true, size: 11 };
+            cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        });
+        
+        sheet.eachRow((row, rowNumber) => {
+            if (rowNumber === 1) return;
+            row.eachCell((cell, colNumber) => {
+                cell.border = { bottom: {style:'thin', color: {argb:'FF1F2937'}} };
+                if ([5].includes(colNumber)) { // Skills
+                    cell.alignment = { vertical: 'top', horizontal: 'left', wrapText: true };
+                } else {
+                    cell.alignment = { vertical: 'middle', horizontal: 'left' };
+                }
+            });
         });
     });
 
@@ -416,6 +490,11 @@ btnRunSearch.addEventListener('click', () => {
             <td class="px-6 py-4 font-medium text-gray-200">
                 <p class="truncate max-w-[200px]" title="${data["Candidate Name"]}">${data["Candidate Name"]}</p>
                 <p class="text-[10px] text-gray-400 truncate max-w-[200px]" title="${data["File Name"]}">${data["File Name"]}</p>
+            </td>
+            <td class="px-6 py-4">
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-[#58a6ff]/20 text-[#58a6ff] border border-[#58a6ff]/30 mb-1 shadow-sm">${data["Experience"] || "N/A"}</span>
+                <br>
+                <span class="text-xs text-gray-400 font-medium">${data["Domain"] || "Other"}</span>
             </td>
             <td class="px-6 py-4 max-w-[250px] flex-wrap items-center pt-5 border-none">
                 ${skillsHtml}
