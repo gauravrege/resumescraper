@@ -37,16 +37,16 @@ const TECH_SKILLS = [
 
 dropzone.addEventListener('dragover', (e) => {
     e.preventDefault();
-    dropzone.classList.add('border-black', 'bg-white/80');
+    dropzone.classList.add('border-gray-500', 'bg-white/10');
 });
 
 dropzone.addEventListener('dragleave', () => {
-    dropzone.classList.remove('border-black', 'bg-white/80');
+    dropzone.classList.remove('border-gray-500', 'bg-white/10');
 });
 
 dropzone.addEventListener('drop', (e) => {
     e.preventDefault();
-    dropzone.classList.remove('border-black', 'bg-white/80');
+    dropzone.classList.remove('border-gray-500', 'bg-white/10');
     
     // File input is handled via change event if we assign files, but let's just trigger process directly
     const files = Array.from(e.dataTransfer.files).filter(f => f.name.toLowerCase().endsWith('.pdf') || f.name.toLowerCase().endsWith('.docx'));
@@ -161,13 +161,13 @@ async function processFiles(files) {
 
 function renderTableRow(data) {
     const tr = document.createElement('tr');
-    tr.className = "hover:bg-gray-50/50 transition-colors";
+    tr.className = "hover:bg-white/5 transition-colors";
     
     // Format skills cleanly
     let skillsHtml = '<span class="text-gray-400 italic">None</span>';
     if (data["Top Skills"] && data["Top Skills"] !== "None Detected" && data["Top Skills"] !== "N/A") {
         const skillsArray = data["Top Skills"].split(', ');
-        skillsHtml = skillsArray.map(s => `<span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-gray-100 text-gray-800 border border-gray-200 mr-1.5 mb-1 shadow-sm">${s}</span>`).join('');
+        skillsHtml = skillsArray.map(s => `<span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-gray-800 text-gray-300 border border-gray-700 mr-1.5 mb-1 shadow-sm">${s}</span>`).join('');
     }
 
     // Format status
@@ -177,9 +177,9 @@ function renderTableRow(data) {
         : `<span class="inline-flex items-center gap-1 text-xs font-medium text-green-600"><i class="ph-bold ph-check"></i> OK</span>`;
 
     tr.innerHTML = `
-        <td class="px-6 py-4 font-medium text-gray-900">
+        <td class="px-6 py-4 font-medium text-gray-200">
             <div class="flex items-center gap-3">
-                <div class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 shrink-0">
+                <div class="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center text-gray-400 shrink-0">
                     <i class="ph-fill ph-user"></i>
                 </div>
                 <div>
@@ -189,8 +189,8 @@ function renderTableRow(data) {
             </div>
         </td>
         <td class="px-6 py-4">
-            <p class="text-sm truncate max-w-[180px] text-gray-600" title="${data["Email"]}"><i class="ph ph-envelope-simple mr-1 text-gray-400"></i>${data["Email"]}</p>
-            <p class="text-xs text-gray-500 mt-0.5"><i class="ph ph-phone mr-1 text-gray-400"></i>${data["Phone"]}</p>
+            <p class="text-sm truncate max-w-[180px] text-gray-400" title="${data["Email"]}"><i class="ph ph-envelope-simple mr-1 text-gray-400"></i>${data["Email"]}</p>
+            <p class="text-xs text-gray-400 mt-0.5"><i class="ph ph-phone mr-1 text-gray-400"></i>${data["Phone"]}</p>
         </td>
         <td class="px-6 py-4 max-w-[200px] flex-wrap items-center pt-5 border-none">
             ${skillsHtml}
@@ -281,7 +281,7 @@ async function generateStyledExcel(dataArray, filename) {
 
     // Header Style
     worksheet.getRow(1).eachCell((cell) => {
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF000000' } }; // Black header
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0D1117' } }; // Black header
         cell.font = { color: { argb: 'FFFFFFFF' }, bold: true, size: 11 };
         cell.alignment = { vertical: 'middle', horizontal: 'center' };
     });
@@ -290,7 +290,7 @@ async function generateStyledExcel(dataArray, filename) {
     worksheet.eachRow((row, rowNumber) => {
         if (rowNumber === 1) return;
         row.eachCell((cell, colNumber) => {
-            cell.border = { bottom: {style:'thin', color: {argb:'FFE5E7EB'}} };
+            cell.border = { bottom: {style:'thin', color: {argb:'FF1F2937'}} };
             if ([4, 5].includes(colNumber)) {
                 cell.alignment = { vertical: 'top', horizontal: 'left', wrapText: true };
             } else {
@@ -389,16 +389,16 @@ btnRunSearch.addEventListener('click', () => {
     shortlistTableBody.innerHTML = '';
     
     if (scoredData.length === 0) {
-        shortlistTableBody.innerHTML = `<tr><td colspan="3" class="px-6 py-4 text-center text-gray-500">No matching candidates found.</td></tr>`;
+        shortlistTableBody.innerHTML = `<tr><td colspan="3" class="px-6 py-4 text-center text-gray-400">No matching candidates found.</td></tr>`;
         return;
     }
 
     scoredData.forEach(data => {
         const tr = document.createElement('tr');
-        tr.className = "hover:bg-gray-50/50 transition-colors";
+        tr.className = "hover:bg-white/5 transition-colors";
         
         // Color code the score
-        let scoreColor = "text-gray-600";
+        let scoreColor = "text-gray-400";
         if (data.matchScore >= 80) scoreColor = "text-green-600 font-bold";
         else if (data.matchScore >= 50) scoreColor = "text-yellow-600 font-medium";
         
@@ -406,14 +406,14 @@ btnRunSearch.addEventListener('click', () => {
         let skillsHtml = '<span class="text-gray-400 italic">None</span>';
         if (data["Top Skills"] && data["Top Skills"] !== "None Detected" && data["Top Skills"] !== "N/A") {
             const skillsArray = data["Top Skills"].split(', ');
-            skillsHtml = skillsArray.map(s => `<span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-gray-100 text-gray-800 border border-gray-200 mr-1.5 mb-1 shadow-sm">${s}</span>`).join('');
+            skillsHtml = skillsArray.map(s => `<span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-gray-800 text-gray-300 border border-gray-700 mr-1.5 mb-1 shadow-sm">${s}</span>`).join('');
         }
 
         tr.innerHTML = `
             <td class="px-6 py-4 whitespace-nowrap">
                 <span class="${scoreColor} text-lg">${data.matchScore}%</span>
             </td>
-            <td class="px-6 py-4 font-medium text-gray-900">
+            <td class="px-6 py-4 font-medium text-gray-200">
                 <p class="truncate max-w-[200px]" title="${data["Candidate Name"]}">${data["Candidate Name"]}</p>
                 <p class="text-[10px] text-gray-400 truncate max-w-[200px]" title="${data["File Name"]}">${data["File Name"]}</p>
             </td>
