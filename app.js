@@ -4,14 +4,22 @@ const dropzone = document.getElementById('dropzone');
 const viewUpload = document.getElementById('view-upload');
 const viewProcessing = document.getElementById('view-processing');
 const viewResults = document.getElementById('view-results');
+const viewShortlist = document.getElementById('view-shortlist');
 
 const progressBar = document.getElementById('progressBar');
 const progressText = document.getElementById('progressText');
 const successText = document.getElementById('successText');
 const previewTableBody = document.getElementById('previewTableBody');
+const shortlistTableBody = document.getElementById('shortlistTableBody');
 
 const btnDownload = document.getElementById('btnDownload');
 const btnReset = document.getElementById('btnReset');
+const btnShortlist = document.getElementById('btnShortlist');
+const btnBackToResults = document.getElementById('btnBackToResults');
+const btnRunSearch = document.getElementById('btnRunSearch');
+
+const jdInput = document.getElementById('jdInput');
+const nameFilter = document.getElementById('nameFilter');
 
 let allExtractedData = [];
 
@@ -112,6 +120,7 @@ async function processFiles(files) {
             }
 
             const parsedData = parseResumeText(fullText, file.name);
+            parsedData.fullText = fullText; // Store full text for JD matching algorithm
             allExtractedData.push(parsedData);
             
             // Inject row into preview table
@@ -317,4 +326,101 @@ btnReset.addEventListener('click', () => {
     
     allExtractedData = [];
     progressBar.style.width = '0%';
+});
+
+// --- Shortlist & JD Matching Logic ---
+
+btnShortlist.addEventListener('click', () => {
+    viewResults.classList.remove('flex');
+    viewResults.classList.add('hidden');
+    viewShortlist.classList.remove('hidden');
+    viewShortlist.classList.add('flex');
+});
+
+btnBackToResults.addEventListener('click', () => {
+    viewShortlist.classList.remove('flex');
+    viewShortlist.classList.add('hidden');
+    viewResults.classList.remove('hidden');
+    viewResults.classList.add('flex');
+});
+
+btnRunSearch.addEventListener('click', () => {
+    const jdText = jdInput.value.toLowerCase();
+    const nameQuery = nameFilter.value.toLowerCase().trim();
+    
+    // Extract required keywords from JD (simple whitespace split and remove punctuation)
+    const jdWords = [...new Set(jdText.replace(/[^\w\s]/g, '').split(/\s+/).filter(w => w.length > 2))];
+
+    // Score each resume
+    let scoredData = allExtractedData.map(data => {
+        let score = 0;
+        
+        // Skip rows that failed extraction
+        if (data["Status"] === "Error") return null;
+
+        // Name filter constraint
+        if (nameQuery && !data["Candidate Name"].toLowerCase().includes(nameQuery)) {
+            return null; 
+        }
+        
+        // TF-IDF simplified: Keyword frequency
+        if (jdWords.length > 0 && data.fullText) {
+            const resumeTextLower = data.fullText.toLowerCase();
+            let matches = 0;
+            jdWords.forEach(word => {
+                // Check if word exists as a whole word in resume text
+                const regex = new RegExp(`\\b${word}\\b`);
+                if (regex.test(resumeTextLower)) {
+                    matches++;
+                }
+            });
+            score = Math.round((matches / jdWords.length) * 100);
+        } else if (jdWords.length === 0 && nameQuery) {
+            score = 100; // If only name is searched, consider it a 100% match
+        }
+        
+        return { ...data, matchScore: score };
+    }).filter(d => d !== null);
+
+    // Sort by descending score
+    scoredData.sort((a, b) => b.matchScore - a.matchScore);
+
+    // Render Shortlist
+    shortlistTableBody.innerHTML = '';
+    
+    if (scoredData.length === 0) {
+        shortlistTableBody.innerHTML = `<tr><td colspan="3" class="px-6 py-4 text-center text-gray-500">No matching candidates found.</td></tr>`;
+        return;
+    }
+
+    scoredData.forEach(data => {
+        const tr = document.createElement('tr');
+        tr.className = "hover:bg-gray-50/50 transition-colors";
+        
+        // Color code the score
+        let scoreColor = "text-gray-600";
+        if (data.matchScore >= 80) scoreColor = "text-green-600 font-bold";
+        else if (data.matchScore >= 50) scoreColor = "text-yellow-600 font-medium";
+        
+        // Format skills cleanly
+        let skillsHtml = '<span class="text-gray-400 italic">None</span>';
+        if (data["Top Skills"] && data["Top Skills"] !== "None Detected" && data["Top Skills"] !== "N/A") {
+            const skillsArray = data["Top Skills"].split(', ');
+            skillsHtml = skillsArray.map(s => `<span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-gray-100 text-gray-800 border border-gray-200 mr-1.5 mb-1 shadow-sm">${s}</span>`).join('');
+        }
+
+        tr.innerHTML = `
+            <td class="px-6 py-4 whitespace-nowrap">
+                <span class="${scoreColor} text-lg">${data.matchScore}%</span>
+            </td>
+            <td class="px-6 py-4 font-medium text-gray-900">
+                <p class="truncate max-w-[200px]" title="${data["Candidate Name"]}">${data["Candidate Name"]}</p>
+                <p class="text-[10px] text-gray-400 truncate max-w-[200px]" title="${data["File Name"]}">${data["File Name"]}</p>
+            </td>
+            <td class="px-6 py-4 max-w-[250px] flex-wrap items-center pt-5 border-none">
+                ${skillsHtml}
+            </td>
+        `;
+        shortlistTableBody.appendChild(tr);
+    });
 });

@@ -92,8 +92,10 @@ def extract_text_from_doc(file_path: str) -> str:
 
 
 def extract_text_from_pdf(file_path: str) -> str:
-    """Extracts text from PDF documents using pdfplumber with pypdf fallback."""
+    """Extracts text from PDF documents using pdfplumber with pypdf and OCR fallbacks."""
     text_chunks = []
+    extracted_text = ""
+    
     # 1. Try pdfplumber
     try:
         import pdfplumber
@@ -111,26 +113,60 @@ def extract_text_from_pdf(file_path: str) -> str:
                         if row_vals:
                             text_chunks.append(" | ".join(row_vals))
 
-        combined = "\n".join(text_chunks)
-        if combined.strip():
-            return combined.strip()
+        combined = "\n".join(text_chunks).strip()
+        if combined:
+            extracted_text = combined
     except Exception as e:
-        logger.warning(f"pdfplumber failed on {os.path.basename(file_path)}: {e}. Trying pypdf fallback.")
+        logger.warning(f"pdfplumber failed on {os.path.basename(file_path)}: {e}")
 
-    # 2. Fallback to pypdf
-    try:
-        from pypdf import PdfReader
-        reader = PdfReader(file_path)
-        chunks = []
-        for page in reader.pages:
-            t = page.extract_text()
-            if t:
-                chunks.append(t)
-        return "\n".join(chunks).strip()
-    except Exception as e:
-        logger.error(f"pypdf also failed on {os.path.basename(file_path)}: {e}")
+    # 2. Fallback to pypdf if pdfplumber extracted nothing
+    if len(extracted_text) < 50:
+        try:
+            from pypdf import PdfReader
+            reader = PdfReader(file_path)
+            chunks = []
+            for page in reader.pages:
+                t = page.extract_text()
+                if t:
+                    chunks.append(t)
+            
+            pypdf_text = "\n".join(chunks).strip()
+            if len(pypdf_text) > len(extracted_text):
+                extracted_text = pypdf_text
+        except Exception as e:
+            logger.warning(f"pypdf failed on {os.path.basename(file_path)}: {e}")
 
-    return ""
+    # 3. Fallback to OCR if text is still empty or very short (likely scanned image)
+    if len(extracted_text) < 50:
+        logger.info(f"Little or no text extracted for {os.path.basename(file_path)}, attempting OCR...")
+        try:
+            import pypdfium2 as pdfium
+            from rapidocr_onnxruntime import RapidOCR
+            
+            ocr = RapidOCR()
+            pdf = pdfium.PdfDocument(file_path)
+            ocr_text = []
+            
+            for i in range(len(pdf)):
+                page = pdf[i]
+                # Render to PIL Image, then convert to numpy array for OCR
+                pil_img = page.render(scale=2).to_pil()
+                import numpy as np
+                image = np.array(pil_img)
+                
+                # result is a list of [box, text, confidence]
+                result, _ = ocr(image)
+                if result:
+                    page_text = "\n".join([line[1] for line in result])
+                    ocr_text.append(page_text)
+            
+            if ocr_text:
+                extracted_text = "\n".join(ocr_text).strip()
+                logger.info(f"OCR successfully extracted text for {os.path.basename(file_path)}")
+        except Exception as e:
+            logger.error(f"OCR failed on {os.path.basename(file_path)}: {e}")
+
+    return extracted_text
 
 
 def extract_text_from_file(file_path: str) -> str:
