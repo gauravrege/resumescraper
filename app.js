@@ -302,49 +302,12 @@ function parseResumeText(text, filename) {
 async function generateStyledExcel(dataArray, filename) {
     const workbook = new ExcelJS.Workbook();
     
-    // --- 1. Dashboard Sheet ---
-    const dashboard = workbook.addWorksheet("Dashboard");
-    dashboard.columns = [
-        { header: '', width: 30 },
-        { header: '', width: 20 }
-    ];
-    
-    // Dashboard Title
-    dashboard.addRow(["Resume Intelligence Dashboard", ""]);
-    dashboard.getRow(1).font = { size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
-    dashboard.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0D1117' } };
-    
-    dashboard.addRow(["", ""]);
-    dashboard.addRow(["Total Resumes Processed", dataArray.length]);
-    dashboard.getCell('A3').font = { bold: true };
-    
-    // Aggregate by Domain
-    const domainCounts = {};
-    dataArray.forEach(d => {
-        domainCounts[d.Domain] = (domainCounts[d.Domain] || 0) + 1;
-    });
-    
-    dashboard.addRow(["", ""]);
-    const headerRow = dashboard.addRow(["Domain Breakdown", "Candidate Count"]);
-    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-    headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
-    
-    for (const [dom, count] of Object.entries(domainCounts)) {
-        dashboard.addRow([dom, count]);
-    }
-    
-    // --- 2. Sheets per Domain ---
-    const uniqueDomains = [...new Set(dataArray.map(d => d.Domain))];
-    
-    uniqueDomains.forEach(domain => {
-        const safeName = (domain || "Other").replace(/[\\/?*[\]]/g, '').substring(0, 31);
-        const sheet = workbook.addWorksheet(safeName);
-        
-        const domainData = dataArray.filter(d => d.Domain === domain);
-        
+    // Helper function to format any sheet uniformly
+    const formatSheet = (sheet, data) => {
         sheet.columns = [
             { header: 'Candidate Name', key: 'Candidate Name', width: 25 },
             { header: 'Experience', key: 'Experience', width: 15 },
+            { header: 'Domain', key: 'Domain', width: 22 },
             { header: 'Email', key: 'Email', width: 30 },
             { header: 'Phone', key: 'Phone', width: 20 },
             { header: 'Top Skills', key: 'Top Skills', width: 40 },
@@ -352,7 +315,7 @@ async function generateStyledExcel(dataArray, filename) {
             { header: 'Status', key: 'Status', width: 12 }
         ];
         
-        sheet.addRows(domainData);
+        sheet.addRows(data);
         
         sheet.getRow(1).eachCell((cell) => {
             cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0D1117' } };
@@ -364,13 +327,27 @@ async function generateStyledExcel(dataArray, filename) {
             if (rowNumber === 1) return;
             row.eachCell((cell, colNumber) => {
                 cell.border = { bottom: {style:'thin', color: {argb:'FF1F2937'}} };
-                if ([5].includes(colNumber)) { // Skills
+                if ([6].includes(colNumber)) { // Skills column
                     cell.alignment = { vertical: 'top', horizontal: 'left', wrapText: true };
                 } else {
                     cell.alignment = { vertical: 'middle', horizontal: 'left' };
                 }
             });
         });
+    };
+
+    // --- 1. Master Sheet: All Candidates ---
+    const masterSheet = workbook.addWorksheet("All Candidates");
+    formatSheet(masterSheet, dataArray);
+    
+    // --- 2. Sheets per Domain ---
+    const uniqueDomains = [...new Set(dataArray.map(d => d.Domain))];
+    
+    uniqueDomains.forEach(domain => {
+        const safeName = (domain || "Other").replace(/[\\/?*[\]]/g, '').substring(0, 31);
+        const sheet = workbook.addWorksheet(safeName);
+        const domainData = dataArray.filter(d => d.Domain === domain);
+        formatSheet(sheet, domainData);
     });
 
     const buffer = await workbook.xlsx.writeBuffer();
